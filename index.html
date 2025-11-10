@@ -6,6 +6,8 @@
     <title>交差点ナビゲーター</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js CDN (サウンド用) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     <!-- Theme Color -->
@@ -25,139 +27,255 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            font-size: 2rem; /* 絵文字のサイズ */
+            font-size: 1.5rem; /* ゲーム画面の絵文字サイズ調整 */
             border: 1px solid #d1d5db; /* gray-300 */
             background-color: #f9fafb; /* gray-50 */
             box-sizing: border-box;
+            position: relative; /* エフェクトのため */
         }
+        /* 設定画面用グリッドセル */
+        .setting-grid-cell {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.25rem;
+            border: 1px solid #e5e7eb; /* gray-200 */
+            background-color: #f9fafb; /* gray-50 */
+            cursor: pointer;
+            transition: background-color 0.1s;
+        }
+        .setting-grid-cell:hover {
+            background-color: #f3f4f6; /* gray-100 */
+        }
+
         /* iPhone/iPadでのタップハイライトを無効化 */
         button, input {
             -webkit-tap-highlight-color: transparent;
         }
-        /* スライダーのつまみを大きくする */
-        input[type="range"]::-webkit-slider-thumb {
-            width: 24px;
-            height: 24px;
-            margin-top: -10px; /* 位置調整 */
-        }
-        input[type="range"]::-moz-range-thumb {
-            width: 24px;
-            height: 24px;
-        }
         
         /* キャラクターの向き */
         #player {
-            font-size: 1.75rem; /* 他の絵文字より少し小さく */
-            transition: none; /* トランジションを無効化 */
+            font-size: 1.25rem; /* ゲーム画面のキャラサイズ調整 */
+            transition: none;
             z-index: 10;
         }
-        /* 向きのクラス (不要になったため削除) */
+
+        /* ゲーム画面の操作ボタン (タブ風) */
+        .operation-btn {
+            padding: 0.75rem 1rem;
+            border: 1px solid #d1d5db; /* gray-300 */
+            background-color: #f9fafb; /* gray-50 */
+            color: #374151; /* gray-700 */
+            font-size: 1rem;
+            font-weight: 500;
+            text-align: center;
+            transition: background-color 0.2s;
+            border-radius: 0.375rem; /* rounded-md */
+        }
+        .operation-btn:active {
+            background-color: #e5e7eb; /* gray-200 */
+        }
+
+        /* モード切替ボタンのスタイル */
+        .mode-btn {
+            padding: 0.5rem 1rem;
+            border: 1px solid #d1d5db;
+            background-color: #f9fafb;
+            color: #6b7280;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .mode-btn.active {
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        /* 回転矢印アイコン */
+        .turn-left-icon {
+            display: inline-block;
+            transform: rotate(-90deg);
+        }
+        .turn-right-icon {
+            display: inline-block;
+            transform: rotate(-90deg); /* 90deg から -90deg に変更 */
+        }
+
+        /* エフェクト用アニメーション */
+        @keyframes ping-effect {
+            0% { transform: scale(1); opacity: 1; }
+            75%, 100% { transform: scale(2); opacity: 0; }
+        }
+        @keyframes tada-effect {
+            0% { transform: scale(1); }
+            10%, 20% { transform: scale(0.9) rotate(-3deg); }
+            30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); }
+            40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); }
+            100% { transform: scale(1) rotate(0); }
+        }
+        .effect-ping {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: rgba(34, 197, 94, 0.5); /* green-500/50 */
+            animation: ping-effect 1s cubic-bezier(0, 0, 0.2, 1);
+            z-index: 5; /* プレイヤーより下 */
+        }
+        .effect-tada {
+            animation: tada-effect 1s ease-in-out;
+        }
     </style>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-100 text-gray-800 h-screen w-screen overflow-hidden">
 
     <!-- 1. 設定画面 (Settings View) -->
-    <div id="settings-view" class="p-4 md:p-8 max-w-2xl mx-auto">
-        <h1 class="text-3xl font-bold mb-6 text-center text-blue-600">交差点ナビゲーター設定</h1>
+    <div id="settings-view" class="p-4 md:p-8 max-w-4xl mx-auto h-full overflow-y-auto">
+        <!-- <h1 class="text-3xl font-bold mb-6 text-center text-blue-600">交差点ナビゲーター設定</h1> -->
+        <h1 class="text-3xl font-bold mb-6 text-center text-blue-600">&nbsp;</h1> <!-- 高さを維持するためのスペーサー -->
 
-        <div class="space-y-6 bg-white p-6 rounded-lg shadow-md">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             
-            <!-- グリッドサイズ -->
-            <div>
-                <label for="grid-size" class="block text-lg font-medium mb-2">グリッドサイズ: <span id="grid-size-label" class="font-bold text-blue-600">4x4</span></label>
-                <input id="grid-size" type="range" min="3" max="10" value="4" class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg">
+            <!-- 左側: 設定入力 -->
+            <div class="space-y-6 bg-white p-6 rounded-lg shadow-md">
+                
+                <!-- グリッドサイズ -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-lg font-medium px-2">グリッドサイズ</legend>
+                    <div class="flex gap-4">
+                        <div>
+                            <label for="grid-rows" class="block text-md font-medium mb-2">行数 (Rows)</label>
+                            <input id="grid-rows" type="number" min="3" max="10" value="4" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
+                        </div>
+                        <div>
+                            <label for="grid-cols" class="block text-md font-medium mb-2">列数 (Cols)</label>
+                            <input id="grid-cols" type="number" min="3" max="10" value="5" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
+                        </div>
+                    </div>
+                </fieldset>
+
+                <!-- 通過地点の数 (削除) -->
+                <!-- 
+                <div>
+                    <label for="waypoints-count" class="block text-lg font-medium mb-2">通過地点の数 (最大3)</label>
+                    <input id="waypoints-count" type="number" min="0" max="3" value="0" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
+                </div>
+                -->
+
+                <!-- アイテム選択 -->
+                <fieldset class="border p-4 rounded-lg">
+                    <legend class="text-lg font-medium px-2">アイテム選択</legend>
+                    <div id="item-selector" class="flex flex-wrap gap-x-4 gap-y-2">
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="item-type" value="start" class="form-radio" checked>
+                            <span class="text-lg">🏝️ (スタート)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="item-type" value="goal" class="form-radio">
+                            <span class="text-lg">🏠 (ゴール)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="item-type" value="waypoint" class="form-radio">
+                            <span class="text-lg">🍔 (通過地点)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="item-type" value="wall" class="form-radio">
+                            <span class="text-lg">❌ (通行不可)</span>
+                        </label>
+                        <label class="flex items-center space-x-2 cursor-pointer">
+                            <input type="radio" name="item-type" value="erase" class="form-radio">
+                            <span class="text-lg">🗑️ (消しゴム)</span>
+                        </label>
+                    </div>
+                    <p class="text-sm text-gray-600 mt-2">※通過地点はランダムなアイコンで配置されます。(最大6個)</p>
+                </fieldset>
+
+                <!-- アクションボタン -->
+                <div class="space-y-4 pt-4">
+                    <button id="random-all-btn" class="w-full p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">
+                        🎲 全設定ランダム生成 (壁なし)
+                    </button>
+                    <button id="random-items-btn" class="w-full p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">
+                        🔄 アイテム配置ランダム化 (壁なし)
+                    </button>
+                    <button id="start-game-btn" class="w-full p-4 bg-blue-600 text-white rounded-lg shadow-md text-lg font-semibold active:bg-blue-700 transition">
+                        🚀 ゲーム開始
+                    </button>
+                </div>
+                <p id="settings-error" class="text-red-500 text-center h-6"></p>
+
             </div>
 
-            <!-- スタート地点 -->
-            <div>
-                <label for="start-coord" class="block text-lg font-medium mb-2">スタート地点 (行, 列)</label>
-                <input id="start-coord" type="text" placeholder="例: 1,1" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
+            <!-- 右側: グリッドプレビュー -->
+            <div class="bg-white p-4 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-center">配置プレビュー</h2>
+                <div id="setting-grid-container" class="grid bg-white border border-gray-300 rounded-lg overflow-hidden">
+                    <!-- 設定グリッドはJSで動的に生成 -->
+                </div>
             </div>
 
-            <!-- ゴール地点 -->
-            <div>
-                <label for="goal-coord" class="block text-lg font-medium mb-2">ゴール地点 (行, 列)</label>
-                <input id="goal-coord" type="text" placeholder="例: 4,4" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
-            </div>
-
-            <!-- 通過地点の数 -->
-            <div>
-                <label for="waypoints-count" class="block text-lg font-medium mb-2">通過地点の数: <span id="waypoints-count-label" class="font-bold text-blue-600">0</span></label>
-                <input id="waypoints-count" type="range" min="0" max="3" value="0" class="w-full h-3 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg">
-            </div>
-
-            <!-- 通過地点の座標 -->
-            <div id="waypoints-coords-container" class="hidden">
-                <label for="waypoints-coords" class="block text-lg font-medium mb-2">通過地点の座標 (セミコロン区切り)</label>
-                <input id="waypoints-coords" type="text" placeholder="例: 2,3; 3,2" class="w-full p-3 border border-gray-300 rounded-lg text-lg">
-            </div>
-
-            <!-- アクションボタン -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                <button id="random-btn" class="w-full p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">
-                    🎲 完全ランダム生成
-                </button>
-                <button id="start-game-btn" class="w-full p-4 bg-blue-600 text-white rounded-lg shadow-md text-lg font-semibold active:bg-blue-700 transition">
-                    🚀 ゲーム開始
-                </button>
-            </div>
         </div>
-        <p id="settings-error" class="text-red-500 text-center mt-4"></p>
     </div>
 
     <!-- 2. ゲームプレイ画面 (Game View) -->
     <div id="game-view" class="hidden h-screen w-screen flex flex-col p-4">
         
         <!-- ヘッダー (設定に戻るボタンとメッセージ) -->
-        <div class="flex justify-between items-center mb-4 w-full max-w-4xl mx-auto">
-            <button id="back-to-settings-btn" class="p-3 bg-gray-200 text-gray-700 rounded-lg shadow active:bg-gray-300 transition text-lg">
-                ⚙️ 設定に戻る
-            </button>
-            <div id="message-area" class="text-xl font-semibold text-green-600 h-8"></div>
+        <div class="flex justify-between items-center mb-4 w-full max-w-7xl mx-auto flex-shrink-0">
+            <!-- <button id="back-to-settings-btn" class="text-blue-600 hover:underline text-lg">設定に戻る</button> --> <!-- 移動 -->
+            <span class="text-lg">&nbsp;</span> <!-- 左上のスペース確保用 -->
+            <div id="message-area" class="text-xl font-semibold text-green-600 h-8 text-right"></div>
         </div>
 
-        <!-- メインエリア (マップと操作パネル) -->
-        <div class="flex-grow flex flex-col md:flex-row gap-4 w-full max-w-4xl mx-auto overflow-hidden">
+        <!-- メインエリア (左右反転、グリッドが右) -->
+        <div class="flex-grow flex flex-col md:flex-row-reverse gap-4 w-full max-w-7xl mx-auto overflow-hidden">
             
-            <!-- マップ表示エリア -->
-            <div class="flex-grow flex justify-center items-center md:w-1/2">
+            <!-- マップ表示エリア (右側、幅を広く) -->
+            <div class="flex-grow flex justify-center items-center md:w-3/5 h-full">
                 <div id="grid-container" class="grid bg-white shadow-lg rounded-lg border border-gray-300">
                     <!-- グリッドセルはJSで動的に生成 -->
                 </div>
             </div>
 
-            <!-- 操作インターフェースエリア -->
-            <div class="flex flex-col md:w-1/2 space-y-4">
+            <!-- 操作インターフェースエリア (左側、幅を狭く) -->
+            <div class="flex flex-col md:w-2/5 space-y-4 h-full">
                 
-                <!-- シーケンス表示 -->
-                <div class="bg-white p-4 rounded-lg shadow-md h-32 md:h-40 overflow-y-auto border">
+                <!-- シーケンス表示 (高さを可変に) -->
+                <div class="bg-white p-4 rounded-lg shadow-md border flex-grow overflow-y-auto">
                     <h3 class="text-lg font-semibold mb-2">シーケンス:</h3>
-                    <div id="sequence-display" class="flex flex-wrap gap-2 text-2xl">
+                    <div id="sequence-display" class="flex flex-wrap gap-2 text-xl">
                         <!-- 矢印はJSで追加 -->
                     </div>
                 </div>
 
-                <!-- 方向ボタン (十字キーレイアウト + 丸枠なし) -->
-                <div class="grid grid-cols-3 grid-rows-3 gap-2 justify-items-center p-4 bg-white rounded-lg shadow-md">
-                    <div class="col-start-2 row-start-1">
-                        <button data-dir="up" class="dir-btn p-1 text-3xl transition">⬆️</button>
+                <!-- 操作パネル (コンパクトに) -->
+                <div class="flex-shrink-0 flex flex-col space-y-4">
+                    
+                    <!-- モード切替 (復活) -->
+                    <div class="flex rounded-md shadow-sm">
+                        <button id="mode-absolute-btn" class="mode-btn active w-1/2 rounded-l-md">絶対方位</button>
+                        <button id="mode-relative-btn" class="mode-btn w-1/2 rounded-r-md">相対方位</button>
                     </div>
-                    <div class="col-start-1 row-start-2">
-                        <button data-dir="left" class="dir-btn p-1 text-3xl transition">⬅️</button>
-                    </div>
-                    <div class="col-start-3 row-start-2">
-                        <button data-dir="right" class="dir-btn p-1 text-3xl transition">➡️</button>
-                    </div>
-                    <div class="col-start-2 row-start-3">
-                        <button data-dir="down" class="dir-btn p-1 text-3xl transition">⬇️</button>
-                    </div>
-                </div>
 
-                <!-- アクションボタン -->
-                <div class="grid grid-cols-3 gap-2">
-                    <button id="undo-btn" class="p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">もどす</button>
-                    <button id="run-btn" class="p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">実行</button>
-                    <button id="reset-btn" class="p-4 bg-green-500 text-white rounded-lg shadow-md text-lg font-semibold active:bg-green-600 transition">リセット</button>
+                    <!-- 方向ボタン (動的) -->
+                    <div id="direction-pad" class="p-3 bg-white rounded-lg shadow-md h-[160px] flex justify-center items-center">
+                        <!-- JSで動的に中身が挿入されます -->
+                    </div>
+
+                    <!-- アクションボタン (スタイル変更) -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="undo-btn" class="p-3 bg-blue-500 text-white rounded-lg shadow-md text-md font-semibold active:bg-blue-600 transition">もどす</button>
+                        <button id="reset-btn" class="p-3 bg-blue-500 text-white rounded-lg shadow-md text-md font-semibold active:bg-blue-600 transition">クリア</button>
+                        <button id="run-btn" class="p-3 bg-green-500 text-white rounded-lg shadow-md text-md font-semibold active:bg-green-600 transition">実行</button>
+                    </div>
+
+                    <!-- 設定に戻るボタン (移動) -->
+                    <button id="back-to-settings-btn" class="text-gray-500 hover:underline text-center text-lg p-2">
+                        設定に戻る
+                    </button>
                 </div>
             </div>
         </div>
@@ -171,15 +289,13 @@
             const gameView = document.getElementById('game-view');
 
             // 設定画面
-            const gridSizeSlider = document.getElementById('grid-size');
-            const gridSizeLabel = document.getElementById('grid-size-label');
-            const startCoordInput = document.getElementById('start-coord');
-            const goalCoordInput = document.getElementById('goal-coord');
-            const waypointsCountSlider = document.getElementById('waypoints-count');
-            const waypointsCountLabel = document.getElementById('waypoints-count-label');
-            const waypointsCoordsContainer = document.getElementById('waypoints-coords-container');
-            const waypointsCoordsInput = document.getElementById('waypoints-coords');
-            const randomBtn = document.getElementById('random-btn');
+            const gridRowsInput = document.getElementById('grid-rows');
+            const gridColsInput = document.getElementById('grid-cols');
+            // const waypointsCountInput = document.getElementById('waypoints-count'); // 削除
+            const itemSelector = document.getElementById('item-selector');
+            const settingGridContainer = document.getElementById('setting-grid-container');
+            const randomAllBtn = document.getElementById('random-all-btn');
+            const randomItemsBtn = document.getElementById('random-items-btn');
             const startGameBtn = document.getElementById('start-game-btn');
             const settingsError = document.getElementById('settings-error');
 
@@ -187,7 +303,9 @@
             const backToSettingsBtn = document.getElementById('back-to-settings-btn');
             const gridContainer = document.getElementById('grid-container');
             const sequenceDisplay = document.getElementById('sequence-display');
-            const dirButtons = document.querySelectorAll('.dir-btn');
+            const directionPad = document.getElementById('direction-pad');
+            const modeAbsoluteBtn = document.getElementById('mode-absolute-btn'); // 復活
+            const modeRelativeBtn = document.getElementById('mode-relative-btn'); // 復活
             const undoBtn = document.getElementById('undo-btn');
             const resetBtn = document.getElementById('reset-btn');
             const runBtn = document.getElementById('run-btn');
@@ -195,98 +313,227 @@
 
             // --- 2. グローバル状態管理 ---
 
+            // ランドマークの絵文字配列 (変更)
+            const allWaypointIcons = ['🍔', '🍎', '🍰', '🍉', '🍓', '🍇', '🥝', '🍍', '🍕', '🍩', '🥐', '🍗', '❤️', '💚', '💛', '💙', '🩷'];
+            let landmarks = allWaypointIcons.sort(() => 0.5 - Math.random()).slice(0, 6); // 初期シャッフル
+
             // ゲーム設定（ビュー間で共有）
             let gameConfig = {
-                gridSize: 4,
-                start: { row: 0, col: 0 }, // 0ベースインデックス
-                goal: { row: 3, col: 3 },  // 0ベースインデックス
-                waypoints: []             // 0ベースインデックス
+                gridRows: 4,
+                gridCols: 5,
+                start: null, // { row: r, col: c }
+                goal: null,  // { row: r, col: c }
+                waypoints: [], // { row: r, col: c, icon: '🍔' }
+                walls: [], // { row: r, col: c }
+                waypointsCount: 0 // 配置された数（パース時に確定）
             };
-
-            // フルーツの絵文字配列
-            const fruits = ['🍎', '🍊', '🍇', '🍓', '🥝', '🍉'];
 
             // ゲームプレイ状態
             let gameState = {
                 player: { row: 0, col: 0, dir: 'up' },
                 sequence: [],
                 collectedWaypoints: new Set(),
-                isRunning: false
+                isRunning: false,
+                moveMode: 'absolute' // 復活 (デフォルトは 'absolute')
             };
 
             // キャラクターのDOM要素
             const playerElement = document.createElement('span');
             playerElement.id = 'player';
-            playerElement.innerHTML = '<span>▲</span>'; // キャラクター (初期は上向き)
+            playerElement.innerHTML = '<span class="text-green-600">▲</span>'; // キャラクター (初期は上向き、緑色に変更)
+
+            // サウンド用シンセサイザー
+            let synth;
 
             // --- 3. 設定画面 (Settings View) のロジック ---
 
-            // グリッドサイズスライダー
-            gridSizeSlider.addEventListener('input', (e) => {
-                const size = e.target.value;
-                gameConfig.gridSize = parseInt(size);
-                gridSizeLabel.textContent = `${size}x${size}`;
-            });
+            // グリッドサイズ入力イベント
+            gridRowsInput.addEventListener('input', updateSettingGrid);
+            gridColsInput.addEventListener('input', updateSettingGrid);
+            // waypointsCountInput イベント (削除)
 
-            // 通過地点スライダー
-            waypointsCountSlider.addEventListener('input', (e) => {
-                const count = e.target.value;
-                waypointsCountLabel.textContent = count;
-                if (count > 0) {
-                    waypointsCoordsContainer.classList.remove('hidden');
-                } else {
-                    waypointsCoordsContainer.classList.add('hidden');
-                    waypointsCoordsInput.value = ''; // 数が0なら座標もクリア
-                }
-            });
+            // 設定グリッドの生成
+            function updateSettingGrid() {
+                // (既存のロジック: グリッドサイズ変更、セルの再生成)
+                let rows = parseInt(gridRowsInput.value);
+                let cols = parseInt(gridColsInput.value);
+                rows = Math.min(Math.max(rows, 3), 10);
+                cols = Math.min(Math.max(cols, 3), 10);
+                gridRowsInput.value = rows;
+                gridColsInput.value = cols;
+                gameConfig.gridRows = rows;
+                gameConfig.gridCols = cols;
+                settingGridContainer.innerHTML = '';
+                settingGridContainer.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
 
-            // 「完全ランダム生成」ボタン
-            randomBtn.addEventListener('click', () => {
-                settingsError.textContent = '';
+                // 既存のアイテムが新しいグリッド外に出ないかチェック
+                if (gameConfig.start && (gameConfig.start.row >= rows || gameConfig.start.col >= cols)) gameConfig.start = null;
+                if (gameConfig.goal && (gameConfig.goal.row >= rows || gameConfig.goal.col >= cols)) gameConfig.goal = null;
+                gameConfig.waypoints = gameConfig.waypoints.filter(wp => wp.row < rows && wp.col < cols);
+                gameConfig.walls = gameConfig.walls.filter(w => w.row < rows && w.col < cols);
                 
-                // 1. グリッドサイズ
-                const size = getRandomInt(3, 10);
-                gridSizeSlider.value = size;
-                gridSizeLabel.textContent = `${size}x${size}`;
-                gameConfig.gridSize = size;
-                
-                const maxIdx = size - 1;
-                let usedCoords = new Set();
+                // アイコン再割り当て
+                gameConfig.waypoints.forEach((wp, i) => { wp.icon = landmarks[i]; });
 
-                // 2. スタート地点
-                gameConfig.start = getRandomCoord(maxIdx, usedCoords);
-                usedCoords.add(coordToString(gameConfig.start));
-                startCoordInput.value = `${gameConfig.start.row + 1},${gameConfig.start.col + 1}`; // 1ベースで表示
-
-                // 3. ゴール地点
-                gameConfig.goal = getRandomCoord(maxIdx, usedCoords);
-                usedCoords.add(coordToString(gameConfig.goal));
-                goalCoordInput.value = `${gameConfig.goal.row + 1},${gameConfig.goal.col + 1}`; // 1ベースで表示
-                
-                // 4. 通過地点
-                const waypointsCount = getRandomInt(0, 3);
-                waypointsCountSlider.value = waypointsCount;
-                waypointsCountLabel.textContent = waypointsCount;
-                
-                gameConfig.waypoints = [];
-                if (waypointsCount > 0) {
-                    waypointsCoordsContainer.classList.remove('hidden');
-                    let waypointsCoordsStr = [];
-                    for (let i = 0; i < waypointsCount; i++) {
-                        const waypoint = getRandomCoord(maxIdx, usedCoords);
-                        usedCoords.add(coordToString(waypoint));
-                        gameConfig.waypoints.push(waypoint);
-                        waypointsCoordsStr.push(`${waypoint.row + 1},${waypoint.col + 1}`); // 1ベース
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const cell = document.createElement('div');
+                        cell.className = 'setting-grid-cell';
+                        cell.dataset.row = r;
+                        cell.dataset.col = c;
+                        cell.addEventListener('click', onSettingCellClick);
+                        settingGridContainer.appendChild(cell);
                     }
-                    waypointsCoordsInput.value = waypointsCoordsStr.join('; ');
-                } else {
-                    waypointsCoordsContainer.classList.add('hidden');
-                    waypointsCoordsInput.value = '';
                 }
+                updateSettingGridUI();
+            }
+
+            // 設定グリッドのセルクリック処理
+            function onSettingCellClick(e) {
+                // e.targetが.setting-grid-cellでない場合(例えば絵文字をクリックした場合)
+                const targetCell = e.target.closest('.setting-grid-cell');
+                if (!targetCell) return;
+
+                const row = parseInt(targetCell.dataset.row);
+                const col = parseInt(targetCell.dataset.col);
+                const coord = { row, col };
+                const selectedItem = itemSelector.querySelector('input[name="item-type"]:checked').value;
+
+                // 既存のアイテムをチェック
+                const isStart = gameConfig.start && gameConfig.start.row === row && gameConfig.start.col === col;
+                const isGoal = gameConfig.goal && gameConfig.goal.row === row && gameConfig.goal.col === col;
+                const waypointIndex = gameConfig.waypoints.findIndex(wp => wp.row === row && wp.col === col);
+                const wallIndex = gameConfig.walls.findIndex(w => w.row === row && w.col === col);
+
+                // 他のアイテムを先に削除
+                if (selectedItem !== 'start' && isStart) gameConfig.start = null;
+                if (selectedItem !== 'goal' && isGoal) gameConfig.goal = null;
+                if (selectedItem !== 'waypoint' && waypointIndex > -1) gameConfig.waypoints.splice(waypointIndex, 1);
+                if (selectedItem !== 'wall' && wallIndex > -1) gameConfig.walls.splice(wallIndex, 1);
+
+                switch (selectedItem) {
+                    case 'start':
+                        gameConfig.start = coord;
+                        break;
+                    case 'goal':
+                        gameConfig.goal = coord;
+                        break;
+                    case 'waypoint':
+                        if (waypointIndex === -1) { // 新規追加のみ
+                            if (gameConfig.waypoints.length < 6) { // 最大6個に固定
+                                const icon = landmarks[gameConfig.waypoints.length];
+                                gameConfig.waypoints.push({ row, col, icon });
+                            } else {
+                                settingsError.textContent = `通過地点は6個までです。`;
+                                setTimeout(() => settingsError.textContent = '', 2000);
+                            }
+                        }
+                        break;
+                    case 'wall':
+                        if (wallIndex === -1) { // 新規追加のみ
+                            gameConfig.walls.push(coord);
+                        }
+                        break;
+                    case 'erase':
+                        // 既に削除済み
+                        break;
+                }
+                
+                // ウェイポイントを削除した場合、アイコンの再割り当て
+                if ((selectedItem === 'erase' || selectedItem === 'waypoint') && waypointIndex > -1) {
+                    gameConfig.waypoints.forEach((wp, i) => { wp.icon = landmarks[i]; });
+                }
+
+                updateSettingGridUI();
+            }
+
+            // 設定グリッドの表示更新
+            function updateSettingGridUI() {
+                settingGridContainer.querySelectorAll('.setting-grid-cell').forEach(cell => {
+                    cell.textContent = '';
+                });
+
+                // 壁 (最背面)
+                gameConfig.walls.forEach(wall => {
+                    const cell = getSettingCell(wall.row, wall.col);
+                    if (cell) cell.textContent = '❌';
+                });
+                // 通過地点
+                gameConfig.waypoints.forEach(wp => {
+                    const cell = getSettingCell(wp.row, wp.col);
+                    if (cell) cell.textContent = wp.icon;
+                });
+                // ゴール
+                if (gameConfig.goal) {
+                    const cell = getSettingCell(gameConfig.goal.row, gameConfig.goal.col);
+                    if (cell) cell.textContent = '🏠';
+                }
+                // スタート (最前面)
+                if (gameConfig.start) {
+                    const cell = getSettingCell(gameConfig.start.row, gameConfig.start.col);
+                    if (cell) cell.textContent = '🏝️';
+                }
+            }
+
+            function getSettingCell(row, col) {
+                return settingGridContainer.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+            }
+
+            // 「全設定ランダム生成」
+            randomAllBtn.addEventListener('click', () => {
+                const rows = getRandomInt(3, 10);
+                const cols = getRandomInt(3, 10);
+                gridRowsInput.value = rows;
+                gridColsInput.value = cols;
+                gameConfig.gridRows = rows;
+                gameConfig.gridCols = cols;
+
+                // 0〜6個の通過地点を「配置」する仕様に変更
+                gameConfig.waypointsCount = getRandomInt(0, 6); // 0-6個に制限
+                
+                randomizeItemPlacement();
+                updateSettingGrid();
             });
+
+            // 「アイテム配置ランダム化」
+            randomItemsBtn.addEventListener('click', () => {
+                gameConfig.gridRows = parseInt(gridRowsInput.value);
+                gameConfig.gridCols = parseInt(gridColsInput.value);
+                // gameConfig.waypointsCount = parseInt(waypointsCountInput.value); // 削除
+                // 代わりに、現在配置されている通過地点の数を維持する
+                gameConfig.waypointsCount = gameConfig.waypoints.length;
+                
+                randomizeItemPlacement();
+                updateSettingGridUI();
+            });
+
+            // ランダム配置ロジック本体
+            function randomizeItemPlacement() {
+                const rows = gameConfig.gridRows;
+                const cols = gameConfig.gridCols;
+                const count = gameConfig.waypointsCount; // 実際に配置する数
+                let usedCoords = new Set();
+                
+                landmarks = allWaypointIcons.sort(() => 0.5 - Math.random()).slice(0, 6); // 再シャッフル
+                gameConfig.walls = []; // ランダム配置では壁はクリア
+
+                gameConfig.start = getRandomCoord(rows, cols, usedCoords);
+                usedCoords.add(coordToString(gameConfig.start));
+
+                gameConfig.goal = getRandomCoord(rows, cols, usedCoords);
+                usedCoords.add(coordToString(gameConfig.goal));
+
+                gameConfig.waypoints = [];
+                for (let i = 0; i < count; i++) {
+                    const waypoint = getRandomCoord(rows, cols, usedCoords);
+                    usedCoords.add(coordToString(waypoint));
+                    gameConfig.waypoints.push({ row: waypoint.row, col: waypoint.col, icon: landmarks[i] });
+                }
+            }
 
             // 「ゲーム開始」ボタン
-            startGameBtn.addEventListener('click', () => {
+            startGameBtn.addEventListener('click', async () => {
+                await initAudio(); // サウンド初期化
                 if (parseSettings()) {
                     showGameView();
                 }
@@ -295,45 +542,27 @@
             // 設定のパースと検証
             function parseSettings() {
                 settingsError.textContent = '';
-                const size = parseInt(gridSizeSlider.value);
-                gameConfig.gridSize = size;
+                gameConfig.gridRows = parseInt(gridRowsInput.value);
+                gameConfig.gridCols = parseInt(gridColsInput.value);
+                // waypointsCount は、現在配置されている数とする
+                gameConfig.waypointsCount = gameConfig.waypoints.length;
 
                 try {
-                    // 1. スタート地点のパース
-                    const start = parseCoord(startCoordInput.value, size);
-                    if (!start) throw new Error('スタート地点の座標が無効です。');
-                    gameConfig.start = start;
-
-                    // 2. ゴール地点のパース
-                    const goal = parseCoord(goalCoordInput.value, size);
-                    if (!goal) throw new Error('ゴール地点の座標が無効です。');
-                    gameConfig.goal = goal;
-
-                    // 3. 通過地点のパース
-                    const waypointsCount = parseInt(waypointsCountSlider.value);
-                    gameConfig.waypoints = [];
-                    if (waypointsCount > 0) {
-                        const waypointStrings = waypointsCoordsInput.value.split(';')
-                                                    .map(s => s.trim()).filter(s => s);
-                        if (waypointStrings.length !== waypointsCount) {
-                            throw new Error(`通過地点の座標を${waypointsCount}個入力してください。`);
+                    if (!gameConfig.start) throw new Error('スタート地点を設定してください。');
+                    if (!gameConfig.goal) throw new Error('ゴール地点を設定してください。');
+                    
+                    // 重複チェック
+                    const coords = [gameConfig.start, gameConfig.goal, ...gameConfig.waypoints, ...gameConfig.walls];
+                    const coordSet = new Set();
+                    for (const coord of coords) {
+                        const str = coordToString(coord);
+                        if (coordSet.has(str)) {
+                            throw new Error('スタート、ゴール、通過地点、通行不可の座標が重複しています。');
                         }
-                        for (const str of waypointStrings) {
-                            const waypoint = parseCoord(str, size);
-                            if (!waypoint) throw new Error(`通過地点の座標「${str}」が無効です。`);
-                            gameConfig.waypoints.push(waypoint);
-                        }
+                        coordSet.add(str);
                     }
 
-                    // 4. 重複チェック
-                    const coords = [gameConfig.start, gameConfig.goal, ...gameConfig.waypoints];
-                    const coordSet = new Set(coords.map(coordToString));
-                    if (coordSet.size !== coords.length) {
-                        throw new Error('スタート、ゴール、通過地点の座標が重複しています。');
-                    }
-
-                    return true; // 正常終了
-
+                    return true;
                 } catch (error) {
                     settingsError.textContent = error.message;
                     return false;
@@ -345,15 +574,67 @@
             // 「設定に戻る」ボタン
             backToSettingsBtn.addEventListener('click', showSettingsView);
 
-            // 方向ボタン
-            dirButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    if (gameState.isRunning) return;
-                    const dir = button.dataset.dir;
-                    gameState.sequence.push(dir);
-                    updateSequenceDisplay();
+            // モード切替 (復活)
+            modeAbsoluteBtn.addEventListener('click', () => setMoveMode('absolute'));
+            modeRelativeBtn.addEventListener('click', () => setMoveMode('relative'));
+
+            function setMoveMode(mode) {
+                gameState.moveMode = mode;
+                gameState.sequence = []; // モード切り替えでシーケンスをリセット
+                updateSequenceDisplay();
+                resetPlayer(); // モード切替時にプレイヤー位置もリセット
+
+                if (mode === 'absolute') {
+                    modeAbsoluteBtn.classList.add('active');
+                    modeRelativeBtn.classList.remove('active');
+                    directionPad.innerHTML = `
+                        <div class="grid grid-cols-3 grid-rows-3 gap-2 justify-items-center items-center w-full h-full">
+                            <div class="col-start-2 row-start-1">
+                                <button data-action="up" class="dir-btn p-2 text-2xl transition">⬆️</button>
+                            </div>
+                            <div class="col-start-1 row-start-2">
+                                <button data-action="left" class="dir-btn p-2 text-2xl transition">⬅️</button>
+                            </div>
+                            <div class="col-start-3 row-start-2">
+                                <button data-action="right" class="dir-btn p-2 text-2xl transition">➡️</button>
+                            </div>
+                            <div class="col-start-2 row-start-3">
+                                <button data-action="down" class="dir-btn p-2 text-2xl transition">⬇️</button>
+                            </div>
+                        </div>
+                    `;
+                } else { // relative
+                    modeAbsoluteBtn.classList.remove('active');
+                    modeRelativeBtn.classList.add('active');
+                    directionPad.innerHTML = `
+                        <div class="grid grid-cols-3 gap-2 w-full h-full items-center">
+                            <button data-action="turnLeft" class="dir-btn operation-btn">
+                                <span class="turn-left-icon">⤴️</span> 左を向く
+                            </button>
+                            <button data-action="forward" class="dir-btn operation-btn">
+                                ⬆️ 直進する
+                            </button>
+                            <button data-action="turnRight" class="dir-btn operation-btn">
+                                <span class="turn-right-icon">⤵️</span> 右を向く
+                            </button>
+                        </div>
+                    `;
+                }
+                // 新しく生成されたボタンにイベントリスナーを再設定
+                addDirectionButtonListeners();
+            }
+
+            // 方向ボタン (動的生成のため委譲)
+            function addDirectionButtonListeners() {
+                directionPad.querySelectorAll('.dir-btn').forEach(button => {
+                    button.addEventListener('click', () => {
+                        if (gameState.isRunning) return;
+                        const action = button.dataset.action;
+                        gameState.sequence.push(action);
+                        updateSequenceDisplay();
+                    });
                 });
-            });
+            }
 
             // 「戻す (UNDO)」ボタン
             undoBtn.addEventListener('click', () => {
@@ -362,18 +643,22 @@
                 updateSequenceDisplay();
             });
 
-            // 「リセット」ボタン
-            resetBtn.addEventListener('click', () => {
+            // 「リセット」ボタン (クリア)
+            resetBtn.addEventListener('click', async () => {
+                await initAudio(); // サウンド初期化
                 if (gameState.isRunning) return;
                 gameState.sequence = [];
                 updateSequenceDisplay();
-                resetPlayer();
+                // resetPlayer(); // ここではなく、generateMapの後に呼ぶ
+                generateMap(); // マップ（消えたアイテム）を再描画
+                resetPlayer(); // プレイヤーをスタートに配置
                 messageArea.textContent = 'リセットしました';
                 setTimeout(() => messageArea.textContent = '', 2000);
             });
 
             // 「実行 (RUN)」ボタン
-            runBtn.addEventListener('click', () => {
+            runBtn.addEventListener('click', async () => {
+                await initAudio(); // サウンド初期化
                 if (gameState.isRunning || gameState.sequence.length === 0) return;
                 runSequence();
             });
@@ -383,10 +668,10 @@
             function showSettingsView() {
                 gameView.classList.add('hidden');
                 settingsView.classList.remove('hidden');
-                // ゲーム状態をリセット
                 gameState.sequence = [];
                 updateSequenceDisplay();
                 messageArea.textContent = '';
+                setMoveMode('absolute'); // 設定画面に戻ったら絶対方位にリセット
             }
 
             function showGameView() {
@@ -394,49 +679,77 @@
                 gameView.classList.remove('hidden');
                 generateMap();
                 resetPlayer();
+                setMoveMode('absolute'); // ゲーム開始時は必ず絶対方位から
             }
 
             // --- 6. ゲームロジック ---
 
             // マップ生成
             function generateMap() {
-                gridContainer.innerHTML = ''; // マップをクリア
-                gridContainer.style.gridTemplateColumns = `repeat(${gameConfig.gridSize}, minmax(0, 1fr))`;
-                gridContainer.style.width = '100%';
-                gridContainer.style.maxWidth = '500px'; // マップの最大幅
+                gridContainer.innerHTML = '';
+                gridContainer.style.gridTemplateColumns = `repeat(${gameConfig.gridCols}, minmax(0, 1fr))`;
+                
+                // コンテナのサイズに基づいてセルのサイズを決定
+                const parentElement = gridContainer.parentElement;
+                const containerWidth = parentElement.clientWidth - 32; // p-4の分を引く
+                const containerHeight = parentElement.clientHeight - 32; // p-4の分を引く
 
-                for (let r = 0; r < gameConfig.gridSize; r++) {
-                    for (let c = 0; c < gameConfig.gridSize; c++) {
+                // 縦横どちらが制約になるか
+                let cellSize = Math.min(
+                    containerWidth / gameConfig.gridCols,
+                    containerHeight / gameConfig.gridRows
+                );
+                
+                // グリッド全体のサイズを設定
+                gridContainer.style.width = `${cellSize * gameConfig.gridCols}px`;
+                gridContainer.style.height = `${cellSize * gameConfig.gridRows}px`;
+
+                // フォントサイズをセルのサイズに合わせる
+                const fontSize = cellSize * 0.4; // セルサイズの40%
+
+                for (let r = 0; r < gameConfig.gridRows; r++) {
+                    for (let c = 0; c < gameConfig.gridCols; c++) {
                         const cell = document.createElement('div');
                         cell.id = `cell-${r}-${c}`;
                         cell.className = 'grid-cell';
+                        cell.style.fontSize = `${fontSize}px`; // フォントサイズを動的に設定
 
-                        // 要素の配置
-                        if (r === gameConfig.goal.row && c === gameConfig.goal.col) {
-                            cell.textContent = '⭐️';
-                        } else if (r === gameConfig.start.row && c === gameConfig.start.col) {
-                            // cell.textContent = '🔥'; // スタートの炎を削除
-                        } else if (gameConfig.waypoints.some(wp => wp.row === r && wp.col === c)) {
-                            cell.textContent = fruits[Math.floor(Math.random() * fruits.length)];
+                        // 要素の配置 (壁、ランドマーク、ゴール)
+                        if (gameConfig.walls.some(w => w.row === r && w.col === c)) {
+                            cell.textContent = '❌';
+                        } else if (r === gameConfig.goal.row && c === gameConfig.goal.col) {
+                            cell.textContent = '🏠';
+                        } else {
+                            const waypoint = gameConfig.waypoints.find(wp => wp.row === r && wp.col === c);
+                            if (waypoint) {
+                                cell.textContent = waypoint.icon;
+                            }
                         }
                         gridContainer.appendChild(cell);
                     }
                 }
+
+                // プレイヤーのフォントサイズも設定
+                playerElement.style.fontSize = `${fontSize * 0.8}px`; // プレイヤーは少し小さく
             }
             
             // プレイヤー初期化 (スタート地点に戻す)
             function resetPlayer() {
+                // [FIX] スタート地点が未設定の場合は何もしない (初期化時エラー防止)
+                if (!gameConfig.start) {
+                    // console.warn("resetPlayer called, but gameConfig.start is not set.");
+                    return;
+                }
                 gameState.player.row = gameConfig.start.row;
                 gameState.player.col = gameConfig.start.col;
-                gameState.player.dir = 'up'; // 初期向き
-                playerElement.innerHTML = '<span>▲</span>'; // 初期絵文字
+                
+                // [FIX] ここからが復元されたコード
+                changeDirection('up'); // 向きをリセット
                 gameState.collectedWaypoints.clear();
                 
-                // スタート地点のセルにプレイヤーを配置
                 const startCell = document.getElementById(`cell-${gameConfig.start.row}-${gameConfig.start.col}`);
                 if (startCell) {
-                    // 既存のプレイヤー要素を削除（念のため）
-                    playerElement.remove();
+                    playerElement.remove(); // 既存のプレイヤーを削除
                     startCell.appendChild(playerElement);
                 }
             }
@@ -447,89 +760,130 @@
                 setButtonsDisabled(true);
                 messageArea.textContent = '実行中...';
                 
-                resetPlayer(); // 実行前に必ずリセット
+                resetPlayer(); // 実行前にリセット
+                await delay(300);
 
-                await delay(300); // スタート地点で一瞬待つ
-
-                for (const dir of gameState.sequence) {
-                    // 1. 向きを変える
-                    changeDirection(dir);
-                    
-                    // 2. 移動先を計算
+                for (const action of gameState.sequence) {
                     let nextRow = gameState.player.row;
                     let nextCol = gameState.player.col;
+                    let didMove = false;
 
-                    if (dir === 'up') nextRow--;
-                    else if (dir === 'down') nextRow++;
-                    else if (dir === 'left') nextCol--;
-                    else if (dir === 'right') nextCol++;
-
-                    // 3. マップ外チェック
-                    if (nextRow < 0 || nextRow >= gameConfig.gridSize || nextCol < 0 || nextCol >= gameConfig.gridSize) {
-                        messageArea.textContent = 'マップの外に出ました！';
-                        await delay(500); // エラー表示
-                        break; // 実行中止
+                    // 1. 向きの決定 (相対/絶対)
+                    if (gameState.moveMode === 'absolute') {
+                        changeDirection(action);
+                        if (action === 'up') nextRow--;
+                        else if (action === 'down') nextRow++;
+                        else if (action === 'left') nextCol--;
+                        else if (action === 'right') nextCol++;
+                        didMove = true;
+                    } else { // relative
+                        const currentDir = gameState.player.dir;
+                        if (action === 'forward') {
+                            changeDirection(currentDir); // 向きはそのまま
+                            if (currentDir === 'up') nextRow--;
+                            else if (currentDir === 'down') nextRow++;
+                            else if (currentDir === 'left') nextCol--;
+                            else if (currentDir === 'right') nextCol++;
+                            didMove = true;
+                        } else if (action === 'turnRight') {
+                            const dirMap = { 'up': 'right', 'right': 'down', 'down': 'left', 'left': 'up' };
+                            changeDirection(dirMap[currentDir]);
+                        } else if (action === 'turnLeft') {
+                            const dirMap = { 'up': 'left', 'left': 'down', 'down': 'right', 'right': 'up' };
+                            changeDirection(dirMap[currentDir]);
+                        }
                     }
-
-                    // 4. 移動
-                    gameState.player.row = nextRow;
-                    gameState.player.col = nextCol;
-                    const nextCell = document.getElementById(`cell-${nextRow}-${nextCol}`);
-                    nextCell.appendChild(playerElement);
                     
-                    // 5. 通過地点チェック
-                    if (gameConfig.waypoints.some(wp => wp.row === nextRow && wp.col === nextCol)) {
-                        gameState.collectedWaypoints.add(coordToString({row: nextRow, col: nextCol}));
+                    if (didMove) {
+                        // 2. マップ外チェック
+                        if (nextRow < 0 || nextRow >= gameConfig.gridRows || nextCol < 0 || nextCol >= gameConfig.gridCols) {
+                            messageArea.textContent = 'マップの外に出ました！';
+                            break; // 実行中断
+                        }
+                        // 3. 壁チェック
+                        const isWall = gameConfig.walls.some(wall => wall.row === nextRow && wall.col === nextCol);
+                        if (isWall) {
+                            messageArea.textContent = '通行不可です！';
+                            break; // 実行中断
+                        }
+
+                        // 4. 移動
+                        gameState.player.row = nextRow;
+                        gameState.player.col = nextCol;
+                        const nextCell = document.getElementById(`cell-${nextRow}-${nextCol}`);
+                        if (nextCell) {
+                            nextCell.appendChild(playerElement);
+                        }
+                        
+                        // 5. 通過地点チェック
+                        const isWaypoint = gameConfig.waypoints.some(wp => wp.row === nextRow && wp.col === nextCol);
+                        if (isWaypoint) {
+                            const coordStr = coordToString({row: nextRow, col: nextCol});
+                            if (!gameState.collectedWaypoints.has(coordStr)) {
+                                gameState.collectedWaypoints.add(coordStr);
+                                playTone(440, 0.1); // 到着音
+                                if (nextCell) {
+                                    showEffect(nextCell, 'collect'); // エフェクト
+
+                                    // アイテム（テキストノード）を探して消す
+                                    const textNode = Array.from(nextCell.childNodes).find(node => 
+                                        node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''
+                                    );
+                                    if (textNode) {
+                                        textNode.textContent = ''; // アイテムを消す
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    // 6. ゴールチェック（途中でゴールについてもOK）
-                    if (nextRow === gameConfig.goal.row && nextCol === gameConfig.goal.col) {
-                        // ゴールに到達
-                    }
-
-                    await delay(300); // 次のステップへのディレイ
+                    await delay(300);
                 }
 
-                // 7. 最終判定
-                checkGoal();
+                // 6. 最終判定
+                const atGoal = gameState.player.row === gameConfig.goal.row && gameState.player.col === gameConfig.goal.col;
+                // gameConfig.waypointsCount は「設定された」通過地点の数
+                const allWaypoints = gameState.collectedWaypoints.size === gameConfig.waypointsCount; 
+
+                if (atGoal && allWaypoints) {
+                    messageArea.textContent = '🎉 クリア！おめでとう！ 🎉';
+                    playTone(880, 0.5); // クリア音
+                    const goalCell = document.getElementById(`cell-${gameConfig.goal.row}-${gameConfig.goal.col}`);
+                    if (goalCell) {
+                        showEffect(goalCell, 'goal'); // ゴールエフェクト
+                    }
+                } else if (atGoal) {
+                    messageArea.textContent = `ゴール！でも通過地点が... (${gameState.collectedWaypoints.size}/${gameConfig.waypointsCount})`;
+                } else if (messageArea.textContent === '実行中...') {
+                    messageArea.textContent = 'ゴールにたどり着けませんでした';
+                }
 
                 gameState.isRunning = false;
                 setButtonsDisabled(false);
             }
 
-            // 向きの変更
+            // 向きの変更 (内部状態 + 表示)
             function changeDirection(dir) {
-                gameState.player.dir = dir;
+                gameState.player.dir = dir; // 内部状態を更新
                 if (dir === 'up') {
-                    playerElement.innerHTML = '<span>▲</span>';
+                    playerElement.innerHTML = '<span class="text-green-600">▲</span>';
                 } else if (dir === 'down') {
-                    playerElement.innerHTML = '<span>▼</span>';
+                    playerElement.innerHTML = '<span class="text-green-600">▼</span>';
                 } else if (dir === 'left') {
                     playerElement.innerHTML = '<span class="text-green-600">◀</span>';
                 } else if (dir === 'right') {
-                    playerElement.innerHTML = '<span>▶</span>';
+                    playerElement.innerHTML = '<span class="text-green-600">▶</span>';
                 }
             }
             
-            // ゴール判定
-            function checkGoal() {
-                const atGoal = gameState.player.row === gameConfig.goal.row && gameState.player.col === gameConfig.goal.col;
-                const allWaypoints = gameState.collectedWaypoints.size === gameConfig.waypoints.length;
-
-                if (atGoal && allWaypoints) {
-                    messageArea.textContent = '🎉 クリア！おめでとう！ 🎉';
-                } else if (atGoal) {
-                    messageArea.textContent = 'ゴール！でも通過地点が... 💎';
-                } else {
-                    messageArea.textContent = 'ゴールに到達できませんでした。';
-                }
-            }
-
             // シーケンス表示の更新
             function updateSequenceDisplay() {
-                const dirMap = { 'up': '⬆️', 'down': '⬇️', 'left': '⬅️', 'right': '➡️' };
-                sequenceDisplay.innerHTML = gameState.sequence.map(dir => 
-                    `<span class="p-1 bg-gray-100 rounded">${dirMap[dir]}</span>`
+                const dirMap = { 
+                    'up': '⬆️', 'down': '⬇️', 'left': '⬅️', 'right': '➡️',
+                    'forward': '直', 'turnLeft': '左', 'turnRight': '右'
+                };
+                sequenceDisplay.innerHTML = gameState.sequence.map(action => 
+                    `<span class="p-1 bg-gray-100 rounded">${dirMap[action]}</span>`
                 ).join('');
             }
 
@@ -539,10 +893,11 @@
                 resetBtn.disabled = disabled;
                 undoBtn.disabled = disabled;
                 backToSettingsBtn.disabled = disabled;
-                dirButtons.forEach(btn => btn.disabled = disabled);
+                modeAbsoluteBtn.disabled = disabled; // 復活
+                modeRelativeBtn.disabled = disabled; // 復活
+                directionPad.querySelectorAll('.dir-btn').forEach(btn => btn.disabled = disabled);
                 
-                // スタイル変更
-                const buttons = [runBtn, resetBtn, undoBtn, backToSettingsBtn, ...dirButtons];
+                const buttons = [runBtn, resetBtn, undoBtn, modeAbsoluteBtn, modeRelativeBtn, ...directionPad.querySelectorAll('.dir-btn')];
                 buttons.forEach(btn => {
                     if (disabled) {
                         btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -554,64 +909,84 @@
 
             // --- 7. ユーティリティ関数 ---
 
-            // 座標文字列のパース (1ベース入力を0ベースに変換)
-            function parseCoord(str, gridSize) {
-                const parts = str.split(',').map(s => s.trim());
-                if (parts.length !== 2) return null;
-                const row = parseInt(parts[0]) - 1; // 1ベース -> 0ベース
-                const col = parseInt(parts[1]) - 1; // 1ベース -> 0ベース
-                if (isNaN(row) || isNaN(col) || row < 0 || row >= gridSize || col < 0 || col >= gridSize) {
-                    return null;
-                }
-                return { row, col };
-            }
-
-            // 座標オブジェクトをSet用の文字列に変換
             function coordToString(coord) {
+                if (!coord) return ''; // null チェック
                 return `${coord.row},${coord.col}`;
             }
 
-            // ランダムな整数
             function getRandomInt(min, max) {
+                min = Math.ceil(min);
+                max = Math.floor(max);
                 return Math.floor(Math.random() * (max - min + 1)) + min;
             }
 
-            // 重複しないランダムな座標を生成 (0ベース)
-            function getRandomCoord(maxIdx, usedCoords) {
-                let coord;
+            function getRandomCoord(rows, cols, usedCoords) {
+                let r, c, str;
                 do {
-                    coord = {
-                        row: getRandomInt(0, maxIdx),
-                        col: getRandomInt(0, maxIdx)
-                    };
-                } while (usedCoords.has(coordToString(coord)));
-                return coord;
+                    r = getRandomInt(0, rows - 1);
+                    c = getRandomInt(0, cols - 1);
+                    str = coordToString({ row: r, col: c });
+                } while (usedCoords.has(str));
+                return { row: r, col: c };
             }
-            
-            // ディレイ関数
+
             function delay(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
+            // --- サウンド関数 ---
+            async function initAudio() {
+                if (synth) return;
+                try {
+                    await Tone.start();
+                    synth = new Tone.Synth().toDestination();
+                    console.log("Audio context started");
+                } catch (e) {
+                    console.error("Failed to start audio context:", e);
+                }
+            }
+
+            function playTone(note, duration) {
+                if (synth) {
+                    synth.triggerAttackRelease(note, duration);
+                }
+            }
+
+            // --- エフェクト関数 ---
+            function showEffect(element, type) {
+                if (!element) return;
+                if (type === 'collect') {
+                    // pingエフェクト（アイテム取得）
+                    const effectEl = document.createElement('div');
+                    effectEl.className = 'effect-ping';
+                    // プレイヤー(span)の前にエフェクト(div)を挿入
+                    const playerEl = element.querySelector('#player');
+                    if (playerEl) {
+                        element.insertBefore(effectEl, playerEl);
+                    } else {
+                        element.appendChild(effectEl);
+                    }
+                    setTimeout(() => effectEl.remove(), 1000);
+                } else if (type === 'goal') {
+                    // tadaエフェクト（ゴール）
+                    element.classList.add('effect-tada');
+                    setTimeout(() => element.classList.remove('effect-tada'), 1000);
+                }
+            }
+
+
             // --- 8. PWAサービスワーカーの登録 ---
+            // (PWA機能は `sw.js` と `manifest.json` に依存)
             if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('sw.js')
-                        .then(registration => {
-                            console.log('ServiceWorker registration successful: ', registration.scope);
-                        })
-                        .catch(err => {
-                            console.log('ServiceWorker registration failed: ', err);
-                        });
-                });
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('Service Worker registered!', reg))
+                    .catch(err => console.log('Service Worker registration failed:', err));
             }
 
             // --- 9. 初期化 ---
-            // デフォルト値でUIを初期化
-            gridSizeSlider.dispatchEvent(new Event('input'));
-            waypointsCountSlider.dispatchEvent(new Event('input'));
-            // 起動時にランダム設定を適用（オプション）
-            randomBtn.click();
+            updateSettingGrid();
+            setMoveMode('absolute'); // 初期モードを 'absolute' に設定 (この中で addDirectionButtonListeners が呼ばれる)
+            randomAllBtn.click(); // 初期状態でランダム生成
         });
     </script>
 </body>
