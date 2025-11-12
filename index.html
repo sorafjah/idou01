@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>交差点ナビゲーター</title>
+  <!-- 変更: ゲーム名を「地図移動」に変更 -->
+  <title>地図移動</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
   <link rel="manifest" href="manifest.json">
@@ -35,19 +36,32 @@
     /* 相対方位コマンドの強調表示 */
     .cmd-relative { border: 2px solid #22d3ee; background-color: #ecfeff; color: #0e7490; font-weight: bold; }
     
-    /* 東西南北ラベル */
-    .cardinal-label { position: absolute; font-size: 0.8rem; color: #6b7280; font-weight: bold; display: none; }
-    .mode-cardinal .cardinal-label { display: block; }
-    .cardinal-n { top: -1.5rem; left: 50%; transform: translateX(-50%); }
-    .cardinal-s { bottom: -1.5rem; left: 50%; transform: translateX(-50%); }
-    .cardinal-e { right: -1.5rem; top: 50%; transform: translateY(-50%); }
-    .cardinal-w { left: -1.5rem; top: 50%; transform: translateY(-50%); }
+    /* 変更: 東西南北ラベル */
+    .cardinal-label {
+      position: absolute;
+      font-size: 1rem;
+      color: #4b5563; /* gray-600 */
+      display: none; /* デフォルト非表示 */
+      z-index: 20;
+    }
+    .mode-cardinal .cardinal-label {
+      display: block; /* モード有効時のみ表示 */
+    }
+    .cardinal-n { top: -1.5rem; left: 50%; transform: translateX(-50%); } /* 北 (上) */
+    .cardinal-s { bottom: -1.5rem; left: 50%; transform: translateX(-50%); } /* 南 (下) */
+    .cardinal-e { right: -1.5rem; top: 50%; transform: translateY(-50%); } /* 東 (右) */
+    .cardinal-w { left: -1.5rem; top: 50%; transform: translateY(-50%); } /* 西 (左) */
+    
+    /* 変更: 壁スタイル (くすみ水色) */
+    .wall-cell { background-color: #94a3b8; /* slate-400 */ }
+    .setting-wall-cell { background-color: #cbd5e1; /* slate-300 */ }
   </style>
 </head>
 <body class="bg-gray-100 text-gray-800 h-screen w-screen overflow-hidden">
 
   <!-- 設定ビュー -->
   <div id="settings-view" class="p-4 md:p-8 max-w-4xl mx-auto h-full overflow-y-auto">
+    <!-- <h1> は空なのでタイトル変更は <title> のみ -->
     <h1 class="text-3xl font-bold mb-6 text-center text-blue-600">&nbsp;</h1>
     <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
       <!-- 左：入力 -->
@@ -67,18 +81,36 @@
         </fieldset>
         <fieldset class="border p-4 rounded-lg">
           <legend class="text-lg font-medium px-2">アイテム選択</legend>
-          <div id="item-selector" class="flex flex-wrap gap-4">
-            <!-- 変更: スタートを緑の▲に変更 -->
-            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="start" checked><span class="text-lg text-green-600">▲ スタート</span></label>
-            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="goal"><span class="text-lg">🏠 ゴール</span></label>
-            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="waypoint"><span class="text-lg">🍔 通過地点</span></label>
-            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="wall"><span class="text-lg">❌ 通行不可</span></label>
-            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="erase"><span class="text-lg">🗑️ 消しゴム</span></label>
+          <!-- 変更: grid grid-cols-2 でレイアウト変更 -->
+          <div id="item-selector" class="grid grid-cols-2 gap-x-4 gap-y-3">
+            <!-- スタート -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="start" checked><span class="text-lg text-green-600">▲ スタート</span>
+            </label>
+            <!-- ゴール -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="goal"><span class="text-lg">🏠 ゴール</span>
+            </label>
+            <!-- 壁 -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="wall"><span class="text-lg"><span class="inline-block w-5 h-5 bg-slate-400 rounded-sm align-middle"></span> 壁</span>
+            </label>
+            <!-- 通行不可 -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="impassable"><span class="text-lg">❌ 通行不可</span>
+            </label>
+            <!-- 通過地点 -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="waypoint"><span class="text-lg">🍔 通過地点</span>
+            </label>
+            <!-- 消しゴム -->
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="item-type" value="erase"><span class="text-lg">🗑️ 消しゴム</span>
+            </label>
           </div>
           <p class="text-sm text-gray-600 mt-2">通過地点は最大6個。ランダム配置も可。</p>
         </fieldset>
         <div class="space-y-3 pt-2">
-          <!-- 変更: 「（壁なし）」を削除 -->
           <button id="random-all-btn" class="w-full p-3 bg-green-500 text-white rounded-lg shadow">🎲 全設定ランダム</button>
           <button id="random-items-btn" class="w-full p-3 bg-green-500 text-white rounded-lg shadow">🔄 アイテムのみランダム</button>
           <button id="start-game-btn" class="w-full p-3 bg-blue-600 text-white rounded-lg shadow">🚀 ゲーム開始</button>
@@ -105,6 +137,7 @@
       <div class="flex-grow flex justify-center items-center md:w-3/5 h-full relative">
         <!-- 東西南北ラベル用ラッパー -->
         <div id="grid-wrapper" class="relative">
+          <!-- 変更: CSSで制御されるラベル -->
           <span class="cardinal-label cardinal-n">北</span>
           <span class="cardinal-label cardinal-s">南</span>
           <span class="cardinal-label cardinal-e">東</span>
@@ -117,7 +150,6 @@
         <div class="bg-white p-3 rounded-lg shadow-md border flex-grow min-h-[320px] overflow-y-auto">
           <div id="sequence-display" class="flex flex-wrap gap-2 text-2xl items-start content-start"></div>
         </div>
-        <!-- 変更: モードボタンを3つに -->
         <div class="flex rounded-md shadow-sm">
           <button id="mode-absolute-btn" class="mode-btn active w-1/3 rounded-l-md">絶対方位</button>
           <button id="mode-cardinal-btn" class="mode-btn w-1/3 border-l-0 border-r-0">東西南北</button>
@@ -162,7 +194,6 @@
     const sequenceDisplay = document.getElementById('sequence-display');
     const directionPad = document.getElementById('direction-pad');
     
-    // モードボタン3つ
     const modeAbsoluteBtn = document.getElementById('mode-absolute-btn');
     const modeCardinalBtn = document.getElementById('mode-cardinal-btn');
     const modeRelativeBtn = document.getElementById('mode-relative-btn');
@@ -197,7 +228,7 @@
     const pickNextIcon = () => landmarks[(iconIndex++) % landmarks.length];
     const resetIcons = () => { landmarks = shuffle(allWaypointIcons).slice(0,6); iconIndex = 0; };
 
-    let gameConfig = { gridRows:5, gridCols:6, start:null, goal:null, waypoints:[], walls:[], waypointsCount:0 };
+    let gameConfig = { gridRows:5, gridCols:6, start:null, goal:null, waypoints:[], walls:[], impassables: [], waypointsCount:0 };
     let gameState = { player:{row:0,col:0,dir:'up'}, sequence:[], collectedWaypoints:new Set(), isRunning:false, moveMode:'absolute' };
 
     const playerElement = document.createElement('span');
@@ -219,6 +250,7 @@
       if (gameConfig.goal && (gameConfig.goal.row>=rows||gameConfig.goal.col>=cols)) gameConfig.goal=null;
       gameConfig.waypoints = gameConfig.waypoints.filter(w=>w.row<rows&&w.col<cols);
       gameConfig.walls = gameConfig.walls.filter(w=>w.row<rows&&w.col<cols);
+      gameConfig.impassables = gameConfig.impassables.filter(w=>w.row<rows&&w.col<cols);
       gameConfig.waypoints.forEach((wp,i)=>wp.icon=gameConfig.waypoints[i].icon ?? landmarks[i%landmarks.length]);
       for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
         const d=document.createElement('div');
@@ -238,10 +270,12 @@
       const isG=gameConfig.goal && gameConfig.goal.row===row && gameConfig.goal.col===col;
       const wpi=gameConfig.waypoints.findIndex(w=>w.row===row && w.col===col);
       const wli=gameConfig.walls.findIndex(w=>w.row===row && w.col===col);
+      const ipi=gameConfig.impassables.findIndex(w=>w.row===row && w.col===col);
       if (sel!=='start' && isS) gameConfig.start=null;
       if (sel!=='goal' && isG) gameConfig.goal=null;
       if (sel!=='waypoint' && wpi>-1) gameConfig.waypoints.splice(wpi,1);
       if (sel!=='wall' && wli>-1) gameConfig.walls.splice(wli,1);
+      if (sel!=='impassable' && ipi>-1) gameConfig.impassables.splice(ipi,1);
       switch(sel){
         case 'start': gameConfig.start=coord; break;
         case 'goal': gameConfig.goal=coord; break;
@@ -258,6 +292,9 @@
         case 'wall':
           if(wli===-1) gameConfig.walls.push(coord);
           break;
+        case 'impassable':
+          if(ipi===-1) gameConfig.impassables.push(coord);
+          break;
         case 'erase':
           break;
       }
@@ -266,11 +303,17 @@
     }
 
     function updateSettingGridUI(){
-      settingGridContainer.querySelectorAll('.setting-grid-cell').forEach(c=>c.textContent='');
-      gameConfig.walls.forEach(w=>{ const c=getSetCell(w.row,w.col); if(c) c.textContent='❌'; });
+      settingGridContainer.querySelectorAll('.setting-grid-cell').forEach(c=>{
+        c.textContent='';
+        c.classList.remove('setting-wall-cell'); // 壁クラスリセット
+      });
+      gameConfig.walls.forEach(w=>{ 
+        const c=getSetCell(w.row,w.col); 
+        if(c) { c.classList.add('setting-wall-cell'); c.textContent=''; } 
+      });
+      gameConfig.impassables.forEach(w=>{ const c=getSetCell(w.row,w.col); if(c) c.textContent='❌'; });
       gameConfig.waypoints.forEach(wp=>{ const c=getSetCell(wp.row,wp.col); if(c) c.textContent=wp.icon; });
       if (gameConfig.goal){ const c=getSetCell(gameConfig.goal.row,gameConfig.goal.col); if(c) c.textContent='🏠'; }
-      // 変更: スタートアイコンを緑の▲に
       if (gameConfig.start){ const c=getSetCell(gameConfig.start.row,gameConfig.start.col); if(c) c.innerHTML='<span class="text-green-600">▲</span>'; }
     }
     const getSetCell=(r,c)=>settingGridContainer.querySelector(`[data-row="${r}"][data-col="${c}"]`);
@@ -299,6 +342,7 @@
     function randomizeItemPlacement(){
       const rows=gameConfig.gridRows, cols=gameConfig.gridCols, count=gameConfig.waypointsCount; const used=new Set();
       gameConfig.walls=[];
+      gameConfig.impassables=[];
       gameConfig.start = randomEmpty(rows,cols,used);
       gameConfig.goal = randomEmpty(rows,cols,used);
       gameConfig.waypoints=[];
@@ -321,7 +365,7 @@
       try{
         if(!gameConfig.start) throw new Error('スタートを配置してください');
         if(!gameConfig.goal) throw new Error('ゴールを配置してください');
-        const all=[gameConfig.start,gameConfig.goal,...gameConfig.waypoints,...gameConfig.walls];
+        const all=[gameConfig.start,gameConfig.goal,...gameConfig.waypoints,...gameConfig.walls, ...gameConfig.impassables];
         const set=new Set();
         for(const a of all){
           const s=`${a.row},${a.col}`;
@@ -338,41 +382,50 @@
     // ゲームビュー
     backToSettingsBtn.addEventListener('click', showSettingsView);
     modeAbsoluteBtn.addEventListener('click',()=>setMoveMode('absolute'));
-    modeCardinalBtn.addEventListener('click',()=>setMoveMode('cardinal')); // 追加
+    modeCardinalBtn.addEventListener('click',()=>setMoveMode('cardinal'));
     modeRelativeBtn.addEventListener('click',()=>setMoveMode('relative'));
 
     function setMoveMode(mode){
       gameState.moveMode=mode; gameState.sequence=[]; updateSequenceDisplay(); resetPlayer();
       
-      // ボタンのアクティブ状態管理
       [modeAbsoluteBtn, modeCardinalBtn, modeRelativeBtn].forEach(b => b.classList.remove('active'));
       if(mode==='absolute') modeAbsoluteBtn.classList.add('active');
       else if(mode==='cardinal') modeCardinalBtn.classList.add('active');
       else modeRelativeBtn.classList.add('active');
 
-      // 東西南北ラベルの表示制御
+      // 変更: 東西南北ラベルの表示制御
       if(mode==='cardinal') gridWrapper.classList.add('mode-cardinal');
       else gridWrapper.classList.remove('mode-cardinal');
 
-      // ボタン生成
       if(mode==='absolute' || mode==='cardinal'){
-        // 絶対方位 または 東西南北
         const labels = (mode==='absolute') 
           ? {up:'⬆️', left:'⬅️', right:'➡️', down:'⬇️'}
           : {up:'北', left:'西', right:'東', down:'南'};
           
-        directionPad.innerHTML=`<div class="grid grid-cols-3 grid-rows-3 gap-1 w-full h-full place-items-center">
-          <div class="col-start-2 row-start-1"><button data-action="up" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg hover:bg-gray-100 border border-gray-200">${labels.up}</button></div>
-          <div class="col-start-1 row-start-2"><button data-action="left" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg hover:bg-gray-100 border border-gray-200">${labels.left}</button></div>
-          <div class="col-start-3 row-start-2"><button data-action="right" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg hover:bg-gray-100 border border-gray-200">${labels.right}</button></div>
-          <div class="col-start-2 row-start-3"><button data-action="down" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg hover:bg-gray-100 border border-gray-200">${labels.down}</button></div>
-        </div>`;
+        if (mode === 'absolute') {
+            // 変更: hover:bg-gray-100 を削除
+            directionPad.innerHTML=`<div class="grid grid-cols-3 grid-rows-3 gap-1 w-full h-full place-items-center">
+              <div class="col-start-2 row-start-1"><button data-action="up" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg">${labels.up}</button></div>
+              <div class="col-start-1 row-start-2"><button data-action="left" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg">${labels.left}</button></div>
+              <div class="col-start-3 row-start-2"><button data-action="right" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg">${labels.right}</button></div>
+              <div class="col-start-2 row-start-3"><button data-action="down" class="dir-btn p-2 text-2xl font-bold w-full h-full flex items-center justify-center rounded-lg">${labels.down}</button></div>
+            </div>`;
+        } else { // cardinal
+            // 変更: hover:bg-gray-100 を削除
+            directionPad.innerHTML=`<div class="grid grid-cols-3 grid-rows-3 gap-1 w-full h-full place-items-center">
+              <div class="col-start-2 row-start-1"><button data-action="up" class="dir-btn p-2 text-lg font-bold w-16 h-16 flex items-center justify-center rounded-lg">${labels.up}</button></div>
+              <div class="col-start-1 row-start-2"><button data-action="left" class="dir-btn p-2 text-lg font-bold w-16 h-16 flex items-center justify-center rounded-lg">${labels.left}</button></div>
+              <div class="col-start-3 row-start-2"><button data-action="right" class="dir-btn p-2 text-lg font-bold w-16 h-16 flex items-center justify-center rounded-lg">${labels.right}</button></div>
+              <div class="col-start-2 row-start-3"><button data-action="down" class="dir-btn p-2 text-lg font-bold w-16 h-16 flex items-center justify-center rounded-lg">${labels.down}</button></div>
+            </div>`;
+        }
       } else {
         // 相対方位
+        // 変更: hover:bg-gray-100 を削除
         directionPad.innerHTML=`<div class="grid grid-cols-3 gap-2 w-full h-full items-center">
-          <button data-action="turnLeft" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50 hover:bg-gray-100">左を向く</button>
-          <button data-action="forward" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50 hover:bg-gray-100">前進する</button>
-          <button data-action="turnRight" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50 hover:bg-gray-100">右を向く</button>
+          <button data-action="turnLeft" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50">左を向く</button>
+          <button data-action="forward" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50">前進する</button>
+          <button data-action="turnRight" class="dir-btn px-3 py-2 border rounded font-bold text-gray-700 bg-gray-50">右を向く</button>
         </div>`;
       }
       addDirListeners();
@@ -439,14 +492,13 @@
     function generateMap(){
       gridContainer.innerHTML='';
       gridContainer.style.gridTemplateColumns=`repeat(${gameConfig.gridCols}, minmax(0,1fr))`;
-      const parent=gridContainer.parentElement.parentElement; // ラッパーの親
-      const cw=parent.clientWidth-40; // ラベル分の余白
+      const parent=gridContainer.parentElement.parentElement;
+      const cw=parent.clientWidth-40;
       const ch=parent.clientHeight-40;
       const size=Math.min(cw/gameConfig.gridCols, ch/gameConfig.gridRows);
       gridContainer.style.width=`${size*gameConfig.gridCols}px`;
       gridContainer.style.height=`${size*gameConfig.gridRows}px`;
       
-      // ラッパーサイズ調整
       gridWrapper.style.width = gridContainer.style.width;
       gridWrapper.style.height = gridContainer.style.height;
 
@@ -456,7 +508,11 @@
         cell.id=`cell-${r}-${c}`;
         cell.className='grid-cell';
         cell.style.fontSize=`${font}px`;
-        if (gameConfig.walls.some(w=>w.row===r&&w.col===c)) cell.textContent='❌';
+        if (gameConfig.walls.some(w=>w.row===r&&w.col===c)) {
+          cell.classList.add('wall-cell'); // 壁クラス適用
+          cell.textContent='';
+        }
+        else if (gameConfig.impassables.some(w=>w.row===r&&w.col===c)) cell.textContent='❌';
         else if (gameConfig.goal && gameConfig.goal.row===r && gameConfig.goal.col===c) cell.textContent='🏠';
         else {
           const wp=gameConfig.waypoints.find(w=>w.row===r&&w.col===c);
@@ -484,7 +540,7 @@
       while(gameState.sequence.length>0){
         const ok = await runOneStep();
         if(!ok) break;
-        await delay(200);
+        await delay(500);
       }
       checkGoal();
       gameState.isRunning=false; setDisabled(false);
@@ -510,11 +566,13 @@
       }
       if(moved){
         if(nr<0||nr>=gameConfig.gridRows||nc<0||nc>=gameConfig.gridCols){ messageArea.textContent='マップ外に出ました'; return false; }
-        if(gameConfig.walls.some(w=>w.row===nr&&w.col===nc)){ messageArea.textContent='通行不可です'; return false; }
+        if(gameConfig.walls.some(w=>w.row===nr&&w.col===nc) || gameConfig.impassables.some(w=>w.row===nr&&w.col===nc)){ 
+          messageArea.textContent='通行不可です'; 
+          return false; 
+        }
         gameState.player.row=nr; gameState.player.col=nc;
         const cell=document.getElementById(`cell-${nr}-${nc}`); if(cell) cell.appendChild(playerElement);
 
-        // ウェイポイント取得
         const wpIndex = gameConfig.waypoints.findIndex(w=>w.row===nr && w.col===nc);
         if(wpIndex > -1){
           const key=`${nr},${nc}`;
@@ -552,7 +610,7 @@
       if(atGoal && all){
         messageArea.textContent='🎉 クリア！おめでとう！';
         playTone(880,0.3);
-        setTimeout(()=>{ sayWaai(); }, 1350);
+        sayWaai();
         const goal=document.getElementById(`cell-${gameConfig.goal.row}-${gameConfig.goal.col}`);
         if(goal){ goal.classList.add('effect-tada'); setTimeout(()=>goal.classList.remove('effect-tada'),1000); }
       }
@@ -566,22 +624,21 @@
 
     function updateSequenceDisplay(){
       let map;
+      let modeClass = 'px-1';
+
       if(gameState.moveMode === 'cardinal'){
         map={ up:'北', down:'南', left:'西', right:'東' };
+        modeClass = 'px-2 py-1 rounded-md cmd-relative';
       } else if (gameState.moveMode === 'relative'){
         map={ forward:'前', turnLeft:'左', turnRight:'右' };
-      } else {
+        modeClass = 'px-2 py-1 rounded-md cmd-relative';
+      } else { // absolute
         map={ up:'⬆️', down:'⬇️', left:'⬅️', right:'➡️' };
       }
       
       sequenceDisplay.innerHTML = gameState.sequence.map(a=>{
         const label = map[a]||a;
-        let cls = 'px-1 bg-gray-100 rounded';
-        // 変更: 相対方位のときに水色で囲む
-        if(gameState.moveMode === 'relative'){
-          cls = 'px-2 py-1 rounded-md cmd-relative';
-        }
-        return `<span class="${cls}">${label}</span>`;
+        return `<span class="${modeClass}">${label}</span>`;
       }).join('');
     }
 
@@ -600,7 +657,6 @@
     // SW
     if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 
-    // 初期（5×6固定）
     updateSettingGrid();
     setMoveMode('absolute');
   });
