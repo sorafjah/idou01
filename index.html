@@ -3,10 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
-  <title>地図移動</title>
+  <title>地図移動（修正版）</title>
+  <!-- Tailwind CDN（開発向け）。本番はPostCSS/CLI推奨 -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+  <!-- 404回避用のデータURLファビコン -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='14' font-size='14'%3E🗺️%3C/text%3E%3C/svg%3E">
+  <!-- PWAのmanifestは未設定（アイコン404防止のため）。用意できたら以下を復帰:
   <link rel="manifest" href="manifest.json">
+  -->
   <meta name="theme-color" content="#ffffff">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
@@ -80,10 +85,7 @@
         </fieldset>
         <fieldset class="border p-4 rounded-lg">
           <legend class="text-lg font-medium px-2">アイテム選択</legend>
-          <!-- レイアウト：
-               1行目：スタート　ゴール
-               2行目：壁　通行不可
-               3行目：通過地点　消しゴム -->
+          <!-- ❌ → 👻 に変更済み -->
           <div id="item-selector" class="grid grid-cols-2 gap-3">
             <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="start" checked><span class="text-lg text-green-600">▲ スタート</span></label>
             <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="item-type" value="goal"><span class="text-lg">🏠 ゴール</span></label>
@@ -190,40 +192,50 @@
     const runBtn = document.getElementById('run-btn');
     const messageArea = document.getElementById('message-area');
 
-    // ---- 音（ユーザー操作後のみ初期化）----
-    let synth; let drum; let noise;
+    // ---- 音（ユーザー操作後のみ初期化：iPad対応）----
+    let synth; let drum; let noise; let mono;
     async function initAudio(){
       try{
         if(!synth){
           if (Tone.context.state !== 'running') await Tone.start();
-          synth=new Tone.Synth().toDestination();
-          drum=new Tone.MembraneSynth().toDestination();
-          noise=new Tone.NoiseSynth({volume:-8, envelope:{attack:0.001, decay:0.2, sustain:0}}).toDestination();
+          synth=new Tone.Synth({ oscillator:{type:'triangle'}, envelope:{attack:0.01,decay:0.2,sustain:0,release:0.8} }).toDestination();
+          mono=new Tone.MonoSynth({ oscillator:{type:'square'}, envelope:{attack:0.01,decay:0.3,sustain:0,release:1.2} }).toDestination();
+          drum=new Tone.MembraneSynth({ pitchDecay:0.03, octaves:6, oscillator:{type:'sine'}, envelope:{attack:0.001,decay:0.4,sustain:0,release:0.1} }).toDestination();
+          noise=new Tone.NoiseSynth({ volume:-10, envelope:{attack:0.001, decay:0.15, sustain:0} }).toDestination();
         }
       }catch(e){ console.warn('Audio init deferred:', e?.message); }
     }
-    ['pointerdown','keydown'].forEach(ev=>{
+    ['pointerdown','keydown','touchstart'].forEach(ev=>{
       window.addEventListener(ev, ()=>initAudio(), { once:true, passive:true });
     });
 
     function playTone(freqOrNote, dur){ if(synth) synth.triggerAttackRelease(freqOrNote,dur); }
+
+    // ✅ ゴール成功音（明るめ）
     function playSuccess(){
       if(!synth) return;
       const now = Tone.now();
-      const notes = ['C5','E5','G5','C6']; // 上がっていく明るいアルペジオ
+      const notes = ['C5','E5','G5','C6'];
       notes.forEach((n,i)=>synth.triggerAttackRelease(n, 0.12, now + i*0.12));
     }
-    function playExplosion(){
-      if(!drum||!noise) return;
-      const now = Tone.now();
-      drum.triggerAttackRelease('C2', '8n', now); // ドン
-      noise.triggerAttackRelease('16n', now+0.02); // パッ
+
+    // ✅ 失敗音：「ちゃらりろりーん↓」低め・長め（下降）
+    function playFailLong(){
+      if(!mono) return;
+      const t = Tone.now();
+      const seq = [ ['E3',0.25], ['D3',0.25], ['C3',0.35], ['A2',0.6] ]; // 下降して最後長め
+      let acc = 0;
+      seq.forEach(([n,d])=>{ mono.triggerAttackRelease(n, d, t+acc); acc += d*0.9; });
     }
-    function playSad(){
-      if(!synth) return;
-      const now = Tone.now();
-      const notes = ['C5','B4','A4','G4','F4']; // 下がっていく残念フレーズ
-      notes.forEach((n,i)=>synth.triggerAttackRelease(n, 0.12, now + i*0.14));
+
+    // ✅ 👻ヒット音：「どっ・どっ・どーとー」3連ドラム＋ノイズ 即終了
+    function playGhostTriple(){
+      if(!drum||!noise) return;
+      const t = Tone.now();
+      drum.triggerAttackRelease('C2','8n', t + 0.00); // どっ
+      drum.triggerAttackRelease('C2','8n', t + 0.28); // どっ
+      drum.triggerAttackRelease('A1','4n', t + 0.56); // どーー
+      noise.triggerAttackRelease('16n', t + 0.60);    // とー（ノイズ添え）
     }
 
     // 状態
@@ -254,8 +266,8 @@
       if (gameConfig.start && (gameConfig.start.row>=rows||gameConfig.start.col>=cols)) gameConfig.start=null;
       if (gameConfig.goal && (gameConfig.goal.row>=rows||gameConfig.goal.col>=cols)) gameConfig.goal=null;
       gameConfig.waypoints = gameConfig.waypoints.filter(w=>w.row<rows&&w.col<cols);
-      gameConfig.walls = gameConfig.walls.filter(w=>w.row<rows&&w.col<cols));
-      gameConfig.impassables = gameConfig.impassables.filter(w=>w.row<rows&&w.col<cols));
+      gameConfig.walls = gameConfig.walls.filter(w=>w.row<rows&&w.col<cols); // ← 余分な")"削除
+      gameConfig.impassables = gameConfig.impassables.filter(w=>w.row<rows&&w.col<cols); // ← 余分な")"削除
       gameConfig.waypoints.forEach((wp,i)=>wp.icon=gameConfig.waypoints[i].icon ?? landmarks[i%landmarks.length]);
       for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
         const d=document.createElement('div');
@@ -523,8 +535,7 @@
       changeDirection('up');
       gameState.collectedWaypoints.clear();
       const s=document.getElementById(`cell-${gameConfig.start.row}-${gameConfig.start.col}`);
-      if(s){ playerElement.remove(); s.appendChild(playerElement);}
-    }
+      if(s){ playerElement.remove(); s.appendChild(playerElement);}    }
 
     async function runSequence(){
       gameState.isRunning=true; setDisabled(true);
@@ -533,10 +544,10 @@
       await delay(200);
       while(gameState.sequence.length>0){
         const ok = await runOneStep();
-        if(!ok) break;
+        if(!ok) break; // 👻ヒット等で即終了
         await delay(500);
       }
-      // 終了判定（爆発で終わってなければ）
+      // 終了判定（👻で終わってなければ）
       if(!gameState.exploded){
         const reachedGoal =
           (gameState.player.row===gameConfig.goal.row && gameState.player.col===gameConfig.goal.col) &&
@@ -546,7 +557,7 @@
           const goal=document.getElementById(`cell-${gameConfig.goal.row}-${gameConfig.goal.col}`);
           if(goal){ goal.classList.add('effect-tada'); setTimeout(()=>goal.classList.remove('effect-tada'),1000); }
         }else{
-          playSad();
+          playFailLong();
         }
       }
       gameState.isRunning=false; setDisabled(false);
@@ -580,10 +591,10 @@
         gameState.player.row=nr; gameState.player.col=nc;
         const cell=document.getElementById(`cell-${nr}-${nc}`); if(cell) cell.appendChild(playerElement);
 
-        // 👻 に到着したら爆発音＆終了
+        // 👻 に到着したら3連ドラム＋ノイズで即終了
         if(gameConfig.impassables.some(w=>w.row===nr&&w.col===nc)){
           gameState.exploded = true;
-          playExplosion();
+          playGhostTriple();
           return false;
         }
 
@@ -623,7 +634,6 @@
       const atGoal = gameState.player.row===gameConfig.goal.row && gameState.player.col===gameConfig.goal.col;
       const all = gameState.collectedWaypoints.size===gameConfig.waypoints.length;
       if(atGoal && all){
-        // runSequence側で音＆演出済み
         const goal=document.getElementById(`cell-${gameConfig.goal.row}-${gameConfig.goal.col}`);
         if(goal){ goal.classList.add('effect-tada'); setTimeout(()=>goal.classList.remove('effect-tada'),1000); }
       }
@@ -655,8 +665,8 @@
     function flashError(msg){ settingsError.textContent=msg; setTimeout(()=>settingsError.textContent='',1800); }
     function toast(msg){} // メッセージ非表示仕様のため空実装
 
-    // SW
-    if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
+    // Service Workerは未登録（アイコン404抑止のため）。用意できたら復帰:
+    // if('serviceWorker' in navigator){ navigator.serviceWorker.register('sw.js').catch(()=>{}); }
 
     // 初期（5×6固定）
     updateSettingGrid();
